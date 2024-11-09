@@ -33,6 +33,7 @@ yarn-error.log*
 **/*.env*
 
 
+
 # vercel
 .vercel
 
@@ -44,3 +45,8 @@ next-env.d.ts
 **/*.ipynb
 
 **/venv
+
+
+
+# pycache
+**/__pycache__
