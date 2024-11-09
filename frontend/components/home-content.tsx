@@ -4,75 +4,76 @@ import { useState } from 'react'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Upload, File, X } from 'lucide-react'
+import { storage } from "@/db/config-firebase";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import UploadFile from "@/components/upload-file"; // Import the new component
+import { User as FirebaseUser } from 'firebase/auth';
+import axios from 'axios';
+
 interface UploadedFile {
   name: string;
   size: number;
+  file: File;
 }
 
-export default function HomeContent() {
+
+export default function HomeContent({ user }: { user: FirebaseUser }) {
   const [query, setQuery] = useState('')
   const [answer, setAnswer] = useState('')
-  const [isDragging, setIsDragging] = useState(false)
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([])
   const [isProcessing, setIsProcessing] = useState(false)
 
-
-
-  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault()
-    setIsDragging(true)
-  }
-
-  const handleDragLeave = () => {
-    setIsDragging(false)
-  }
-
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault()
-    setIsDragging(false)
-    handleFiles(e.dataTransfer.files)
-  }
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      handleFiles(e.target.files)
+  const handleProcessDocuments = async (user: FirebaseUser) => {
+    if (!user) {
+      alert("User not authenticated. Please log in.");
+      return;
     }
-  }
+    setIsProcessing(true);
+    
+    try {
+      const uploadPromises = uploadedFiles.map(async (uploadedFile) => {
+        const storageRef = ref(storage, `users/${user.uid}/${uploadedFile.name}`);
+        await uploadBytes(storageRef, uploadedFile.file);
+        const downloadURL = await getDownloadURL(storageRef);
+        return { ...uploadedFile, downloadURL };
+      });
 
-  const handleFiles = (files: FileList) => {
-    const newFiles = Array.from(files).map(file => ({
-      name: file.name,
-      size: file.size
-    }))
-    setUploadedFiles(prev => [...prev, ...newFiles])
-  }
+      const uploadedResults = await Promise.all(uploadPromises);
+      console.log("Uploaded documents:", uploadedResults);
 
-  const removeFile = (fileName: string) => {
-    setUploadedFiles(prev => prev.filter(file => file.name !== fileName))
-  }
+      // Replace fetch with axios.post
+      const response = await axios.post(
+        "/api/add_documents",
+        { documents: uploadedResults },
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
 
-  const handleProcessDocuments = () => {
-    setIsProcessing(true)
-    // Simulate processing delay
-    setTimeout(() => {
-      setIsProcessing(false)
-      // Here you would typically send the files to your backend
-      console.log('Processing documents:', uploadedFiles)
-      // For now, we'll just show an alert
-      alert('Documents processed successfully!')
-    }, 2000)
-  }
+      if (response.status === 200) {
+        alert("Documents processed successfully!");
+      } else {
+        console.error("Backend processing failed.", response);
+        alert("Documents processed but backend encountered an error.");
+      }
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        console.error("Axios error:", error.response);
+        alert("Failed to upload documents. Please try again.");
+      } else {
+        console.error("Unexpected error:", error);
+        alert("An unexpected error occurred. Please try again.");
+      }
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     setAnswer(`This is a sample answer to your question: ${query}`)
-  }
-
-  const formatFileSize = (bytes: number) => {
-    if (bytes < 1024) return bytes + ' bytes'
-    else if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB'
-    else return (bytes / 1048576).toFixed(1) + ' MB'
   }
 
   return (
@@ -90,63 +91,12 @@ export default function HomeContent() {
             <CardTitle>Upload Documents</CardTitle>
           </CardHeader>
           <CardContent>
-            <div
-              className={`border-2 border-dashed rounded-lg p-8 text-center ${
-                isDragging ? 'border-primary' : 'border-muted-foreground'
-              }`}
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
-            >
-              <Upload className="mx-auto h-12 w-12 text-muted-foreground" />
-              <p className="mt-2 text-sm text-muted-foreground">
-                Drag and drop your documents here or click to browse
-              </p>
-              <Input
-                type="file"
-                className="hidden"
-                onChange={handleFileChange}
-                id="file-upload"
-                multiple
-              />
-              <Button
-                variant="secondary"
-                className="mt-4"
-                onClick={() => document.getElementById('file-upload')?.click()}
-              >
-                Choose Files
-              </Button>
-            </div>
-            {uploadedFiles.length > 0 && (
-              <div className="mt-4">
-                <h3 className="font-semibold mb-2">Uploaded Documents:</h3>
-                <ul className="space-y-2">
-                  {uploadedFiles.map((file, index) => (
-                    <li key={index} className="flex items-center justify-between bg-muted p-2 rounded-md">
-                      <div className="flex items-center">
-                        <File className="h-4 w-4 mr-2" />
-                        <span className="text-sm">{file.name} ({formatFileSize(file.size)})</span>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => removeFile(file.name)}
-                        aria-label={`Remove ${file.name}`}
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </li>
-                  ))}
-                </ul>
-                <Button
-                  className="w-full mt-4"
-                  onClick={handleProcessDocuments}
-                  disabled={isProcessing}
-                >
-                  {isProcessing ? 'Processing...' : 'Process Documents'}
-                </Button>
-              </div>
-            )}
+            <UploadFile
+              uploadedFiles={uploadedFiles}
+              setUploadedFiles={setUploadedFiles}
+              isProcessing={isProcessing}
+              handleProcessDocuments={() => handleProcessDocuments(user)}
+            />
           </CardContent>
         </Card>
 

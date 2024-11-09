@@ -49,27 +49,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
 
   const checkFirstLogin = async (user: FirebaseUser) => {
-    const userDocRef = doc(db, 'users', user.uid);
-    const userDoc = await getDoc(userDocRef);
-    
-    if (!userDoc.exists()) {
-      // First login
-      await setDoc(userDocRef, {
-        email: user.email,
-        firstLogin: true,
-        // Add any other initial user data you want to store
-      });
-      router.push('/onboarding');
-    } else {
-      const userData = userDoc.data();
-      if (userData.firstLogin) {
-        // User hasn't completed onboarding
-        router.push('/onboarding');
-      } else {
-        // Regular login
         router.push('/');
-      }
-    }
   };
 
   // Authentication Functions
@@ -77,7 +57,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const result = await signInWithPopup(auth, googleProvider);
       setUser(result.user);
-      await checkFirstLogin(result.user);
+      router.push('/');
     } catch (error) {
       console.error("Google Sign-In Error:", error);
       toast({
@@ -92,7 +72,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const result = await signInWithPopup(auth, githubProvider);
       setUser(result.user);
-      await checkFirstLogin(result.user);
+      router.push('/');
     } catch (error) {
       console.error("Github Sign-In Error:", error);
       toast({
@@ -107,7 +87,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const result = await signInWithPopup(auth, appleProvider);
       setUser(result.user);
-      await checkFirstLogin(result.user);
+      router.push('/');
     } catch (error) {
       console.error("Apple Sign-In Error:", error);
       toast({
@@ -181,7 +161,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const redirectIfAuthenticated = () => {
     if (user) {
-      checkFirstLogin(user);
+      router.push('/');
     }
   };
 
@@ -191,7 +171,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUser(firebaseUser);
       setIsLoading(false);
       if (firebaseUser) {
-        await checkFirstLogin(firebaseUser);
+        router.push('/');
       }
     });
     return () => unsubscribe();
