@@ -3,7 +3,7 @@ import os
 from openai import OpenAI
 from pinecone import Pinecone, ServerlessSpec
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 import logging
@@ -36,20 +36,31 @@ index = pc.Index(host=os.getenv("INDEX_HOST"))
 class Document(BaseModel):
     name: str
     size: int
-    downloadURL: str
 
 
-@app.post("/api/add_documents")
-def add_documents(documents: List[Document]):
+@app.post("/add_documents")
+async def add_documents(files: List[UploadFile] = File(...)):
     try:
-        for doc in documents:
-            # Process each document
-            print(f"Processing document: {doc.name}, URL: {doc.downloadURL}")
-            chunks = parse_and_chunk_pdf(doc.downloadURL)
-            populate_index(index, chunks)
+        for file in files:
+            contents = await file.read()
+            logger.info(f"Processing document: {file.filename}, Size: {len(contents)} bytes")
             
+            # Save the file temporarily
+            temp_path = os.path.join("/tmp", file.filename)
+            with open(temp_path, "wb") as temp_file:
+                temp_file.write(contents)
+            
+            # Process the saved file
+            chunks = parse_and_chunk_pdf(temp_path)
+            print(f"Parsed {len(chunks)} chunks from {file.filename}")
+            populate_index(index, client, chunks)
+            
+            # Remove the temporary file
+            os.remove(temp_path)
+        
         return {"message": "Documents processed successfully"}
     except Exception as e:
+        logger.error(f"Error processing documents: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # retrieve
