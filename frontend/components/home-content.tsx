@@ -4,12 +4,20 @@ import { useState } from 'react'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Upload } from 'lucide-react'
+import { Upload, File, X } from 'lucide-react'
+interface UploadedFile {
+  name: string;
+  size: number;
+}
 
 export default function HomeContent() {
   const [query, setQuery] = useState('')
   const [answer, setAnswer] = useState('')
   const [isDragging, setIsDragging] = useState(false)
+  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([])
+  const [isProcessing, setIsProcessing] = useState(false)
+
+
 
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault()
@@ -23,19 +31,48 @@ export default function HomeContent() {
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault()
     setIsDragging(false)
-    // Handle file drop here
-    console.log('Files dropped:', e.dataTransfer.files)
+    handleFiles(e.dataTransfer.files)
   }
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    // Handle file selection here
-    console.log('Files selected:', e.target.files)
+    if (e.target.files) {
+      handleFiles(e.target.files)
+    }
+  }
+
+  const handleFiles = (files: FileList) => {
+    const newFiles = Array.from(files).map(file => ({
+      name: file.name,
+      size: file.size
+    }))
+    setUploadedFiles(prev => [...prev, ...newFiles])
+  }
+
+  const removeFile = (fileName: string) => {
+    setUploadedFiles(prev => prev.filter(file => file.name !== fileName))
+  }
+
+  const handleProcessDocuments = () => {
+    setIsProcessing(true)
+    // Simulate processing delay
+    setTimeout(() => {
+      setIsProcessing(false)
+      // Here you would typically send the files to your backend
+      console.log('Processing documents:', uploadedFiles)
+      // For now, we'll just show an alert
+      alert('Documents processed successfully!')
+    }, 2000)
   }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    // Handle question submission here
     setAnswer(`This is a sample answer to your question: ${query}`)
+  }
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return bytes + ' bytes'
+    else if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB'
+    else return (bytes / 1048576).toFixed(1) + ' MB'
   }
 
   return (
@@ -80,6 +117,36 @@ export default function HomeContent() {
                 Choose Files
               </Button>
             </div>
+            {uploadedFiles.length > 0 && (
+              <div className="mt-4">
+                <h3 className="font-semibold mb-2">Uploaded Documents:</h3>
+                <ul className="space-y-2">
+                  {uploadedFiles.map((file, index) => (
+                    <li key={index} className="flex items-center justify-between bg-muted p-2 rounded-md">
+                      <div className="flex items-center">
+                        <File className="h-4 w-4 mr-2" />
+                        <span className="text-sm">{file.name} ({formatFileSize(file.size)})</span>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => removeFile(file.name)}
+                        aria-label={`Remove ${file.name}`}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+                <Button
+                  className="w-full mt-4"
+                  onClick={handleProcessDocuments}
+                  disabled={isProcessing}
+                >
+                  {isProcessing ? 'Processing...' : 'Process Documents'}
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
 
