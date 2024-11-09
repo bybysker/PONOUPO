@@ -38,12 +38,13 @@ export default function HomeContent({ user }: { user: FirebaseUser }) {
         return { ...uploadedFile, downloadURL };
       });
 
+      console.log("Uploading documents for user:", user.uid);
       const uploadedResults = await Promise.all(uploadPromises);
       console.log("Uploaded documents:", uploadedResults);
 
       // Replace fetch with axios.post
       const response = await axios.post(
-        "/api/add_documents",
+        `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/add_documents`,
         { documents: uploadedResults },
         {
           headers: {
@@ -60,7 +61,7 @@ export default function HomeContent({ user }: { user: FirebaseUser }) {
       }
     } catch (error) {
       if (axios.isAxiosError(error)) {
-        console.error("Axios error:", error.response);
+        //console.error("Axios error:", error.response);
         alert("Failed to upload documents. Please try again.");
       } else {
         console.error("Unexpected error:", error);
@@ -71,9 +72,38 @@ export default function HomeContent({ user }: { user: FirebaseUser }) {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setAnswer(`This is a sample answer to your question: ${query}`)
+    setIsProcessing(true)
+    
+    try {
+      const response = await axios.get(
+        `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/query`,
+        {
+          params: { query },
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (response.status === 200) {
+        setAnswer(response.data);
+      } else {
+        console.error("Query failed:", response);
+        setAnswer("Failed to get an answer. Please try again.");
+      }
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        console.error("Axios error:", error.response);
+        setAnswer("An error occurred while getting the answer. Please try again.");
+      } else {
+        console.error("Unexpected error:", error);
+        setAnswer("An unexpected error occurred. Please try again.");
+      }
+    } finally {
+      setIsProcessing(false);
+    }
   }
 
   return (
@@ -111,11 +141,13 @@ export default function HomeContent({ user }: { user: FirebaseUser }) {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
               />
-              <Button type="submit" className="w-full">Ask Question</Button>
+              <Button type="submit" className="w-full" disabled={isProcessing}>
+                {isProcessing ? 'Processing...' : 'Ask Question'}
+              </Button>
             </form>
             {answer && (
               <div className="mt-4 p-4 bg-muted rounded-lg">
-                <p className="text-sm text-muted-foreground">Your answer will appear here...</p>
+                <p className="text-sm text-muted-foreground">Here is your answer...</p>
                 <p className="mt-2">{answer}</p>
               </div>
             )}
