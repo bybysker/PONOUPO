@@ -1,8 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { useAuth } from "@/hooks/useAuth"
+import { storage } from "@/db/config-firebase"
+import { ref, listAll, getMetadata, deleteObject } from "firebase/storage"
 
 interface Document {
   id: string
@@ -12,14 +15,67 @@ interface Document {
 }
 
 export default function MyDocsContent() {
-  const [documents, setDocuments] = useState<Document[]>([
-    { id: '1', name: 'Document 1.pdf', uploadDate: '2024-03-01', size: '1.2 MB' },
-    { id: '2', name: 'Document 2.docx', uploadDate: '2024-03-02', size: '568 KB' },
-    { id: '3', name: 'Document 3.txt', uploadDate: '2024-03-03', size: '24 KB' },
-  ])
+  const { user } = useAuth()
+  const [documents, setDocuments] = useState<Document[]>([])
+  const [loading, setLoading] = useState<boolean>(true)
+  const [error, setError] = useState<string | null>(null)
 
-  const handleDelete = (id: string) => {
-    setDocuments(documents.filter(doc => doc.id !== id))
+  useEffect(() => {
+    if (!user) {
+      setLoading(false)
+      return
+    }
+
+    const fetchDocuments = async () => {
+      try {
+        const documentsRef = ref(storage, `users/${user.uid}/`)
+        const res = await listAll(documentsRef)
+
+        const docs = await Promise.all(res.items.map(async (item) => {
+          const metadata = await getMetadata(item)
+          return {
+            id: item.fullPath, // Using fullPath as a unique identifier
+            name: item.name,
+            uploadDate: metadata.timeCreated ? new Date(metadata.timeCreated).toLocaleDateString() : 'N/A',
+            size: formatFileSize(metadata.size),
+          }
+        }))
+
+        setDocuments(docs)
+      } catch (err: any) {
+        console.error("Error fetching documents:", err)
+        setError("Failed to load documents.")
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchDocuments()
+  }, [user])
+
+  const handleDelete = async (id: string) => {
+    try {
+      const fileRef = ref(storage, id)
+      await deleteObject(fileRef)
+      setDocuments(documents.filter(doc => doc.id !== id))
+    } catch (err: any) {
+      console.error("Error deleting document:", err)
+      alert("Failed to delete the document. Please try again.")
+    }
+  }
+
+  const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return `${bytes} bytes`
+    else if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`
+    else return `${(bytes / 1048576).toFixed(1)} MB`
+  }
+
+  if (loading) {
+    return <p>Loading documents...</p>
+  }
+
+  if (error) {
+    return <p className="text-red-500">{error}</p>
   }
 
   return (

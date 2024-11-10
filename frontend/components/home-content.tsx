@@ -31,12 +31,24 @@ export default function HomeContent({ user }: { user: FirebaseUser }) {
     setIsProcessing(true);
     
     try {
+
+      const uploadPromises = uploadedFiles.map(async (uploadedFile) => {
+        const storageRef = ref(storage, `users/${user.uid}/${uploadedFile.name}`);
+        await uploadBytes(storageRef, uploadedFile.file);
+        const downloadURL = await getDownloadURL(storageRef);
+        return { ...uploadedFile, downloadURL };
+      });
+
       const formData = new FormData();
       uploadedFiles.forEach((uploadedFile) => {
         formData.append('files', uploadedFile.file, uploadedFile.name);
       });
 
       console.log("Uploading documents for user:", user.uid);
+      const uploadedResults = await Promise.all(uploadPromises);
+      console.log("Uploaded documents:", uploadedResults);
+
+      // Replace fetch with axios.post
       const response = await axios.post(
         `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/add_documents`,
         formData,
