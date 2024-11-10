@@ -66,7 +66,11 @@ async def add_documents(files: List[UploadFile] = File(...)):
 # retrieve
 @app.get("/query")
 def query(query: str):
-    answer = query_data(index, client, query)
-    return answer
+    try:
+        answer = query_data(index, client, query)
+        return answer
+    except Exception as e:
+        logger.error(f"Error querying data: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 

@@ -18,14 +18,17 @@ load_dotenv()
 
 
 def parse_and_chunk_pdf(filepath: str):
+    logger.info(f"Parsing and chunking PDF file: {filepath}")
     elements = partition_pdf(filepath)
     chunks = chunk_by_title(elements)
-
+    logger.info(f"Generated {len(chunks)} chunks from PDF")
     return chunks
 
 def get_index(pc_client: Pinecone, index_name: str):
+    logger.info(f"Getting or creating index: {index_name}")
     # check if index already exists (it shouldn't if this is first time)
     if index_name not in pc_client.list_indexes().names():
+        logger.info(f"Index {index_name} does not exist, creating new index")
         # if does not exist, create index
         pc_client.create_index(
             name=index_name,
@@ -43,19 +46,23 @@ def get_index(pc_client: Pinecone, index_name: str):
     return index
 
 def embed_str(openai_client: OpenAI, text: str, model: str="text-embedding-3-small"):
+    logger.debug(f"Generating embedding for text of length {len(text)} using model {model}")
     text = text.replace("\n", " ")
     return openai_client.embeddings.create(input = [text], model=model).data[0].embedding
 
 
 def embed_batch(openai_client: OpenAI, texts: list[str], model: str="text-embedding-3-small"):
+    logger.debug(f"Batch embedding {len(texts)} texts using model {model}")
     return [embed_str(openai_client, text, model) for text in texts]
 
 def populate_index(index, openai_client: OpenAI, chunks: list, batch_size: int=100):
+    logger.info(f"Populating index with {len(chunks)} chunks using batch size {batch_size}")
 
     for i in tqdm(range(0, len(chunks), batch_size)):
         # find end of batch
         i_end = min(len(chunks), i+batch_size)
         chunks_batch = chunks[i:i_end]
+        logger.debug(f"Processing batch {i//batch_size + 1}: chunks {i} to {i_end}")
         # get ids
         ids_batch = [x.id for x in chunks_batch]
         # get texts to encode
@@ -66,7 +73,8 @@ def populate_index(index, openai_client: OpenAI, chunks: list, batch_size: int=1
             try:
                 batch_embeddings = embed_batch(openai_client, texts)
                 done = True
-            except:
+            except Exception as e:
+                logger.warning(f"Rate limit hit, sleeping for 5 seconds: {str(e)}")
                 sleep(5)
         # cleanup metadata
         metadata_batch = [{
@@ -79,12 +87,16 @@ def populate_index(index, openai_client: OpenAI, chunks: list, batch_size: int=1
         to_upsert = list(zip(ids_batch, batch_embeddings, metadata_batch))
         # upsert to Pinecone
         index.upsert(vectors=to_upsert)
+        logger.debug(f"Upserted batch of {len(to_upsert)} vectors")
 
 def filter_matches(matches, threshold=0.3):
+    logger.debug(f"Filtering {len(matches)} matches with threshold {threshold}")
     filtered_matches = [x for x in matches if x['score'] > threshold]
+    logger.debug(f"Retained {len(filtered_matches)} matches after filtering")
     return filtered_matches
 
 def retrieve(index, openai_client: OpenAI, query: str, limit: int=3750) -> str:
+    logger.info(f"Retrieving context for query: {query[:50]}...")
     xq = embed_str(openai_client, query)
 
     # get relevant contexts
@@ -93,6 +105,7 @@ def retrieve(index, openai_client: OpenAI, query: str, limit: int=3750) -> str:
     contexts = [
         x['metadata']['text'] for x in filtered_matches
     ]    
+    logger.debug(f"Retrieved {len(contexts)} relevant contexts")
     # build our prompt with the retrieved contexts included
     prompt_start = (
         "Answer the question based on the context below.\n\n"+
@@ -102,6 +115,7 @@ def retrieve(index, openai_client: OpenAI, query: str, limit: int=3750) -> str:
         f"\n\nQuestion: {query}\nAnswer:"
     )
     if len(contexts) == 0:
+        logger.warning("No contexts found for query")
         prompt = prompt_start + prompt_end
         return prompt
     # append contexts until hitting limit
@@ -119,9 +133,11 @@ def retrieve(index, openai_client: OpenAI, query: str, limit: int=3750) -> str:
                 "\n\n---\n\n".join(contexts) +
                 prompt_end
             )
+    logger.debug(f"Generated prompt of length {len(prompt)}")
     return prompt
 
 def complete(openai_client: OpenAI, query: str, system_prompt: str) -> str:
+    logger.info("Generating completion with GPT-4")
     completion = openai_client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages = [
@@ -130,8 +146,12 @@ def complete(openai_client: OpenAI, query: str, system_prompt: str) -> str:
                 ],
                 seed=42
             )
+    logger.debug("Successfully generated completion")
     return completion.choices[0].message.content
 
 def query_data(index, openai_client: OpenAI,query: str):
+    logger.info(f"Processing query: {query[:50]}...")
     prompt = retrieve(index, openai_client, query)
-    return complete(openai_client, prompt, SYSTEM_PROMPT)
+    answer = complete(openai_client, prompt, SYSTEM_PROMPT)
+    logger.info("Query processing complete")
+    return answer
