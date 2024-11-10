@@ -1,8 +1,7 @@
 from api.rag import *
 import os
 from openai import OpenAI
-#from pinecone.grpc import PineconeGRPC as Pinecone
-from pinecone import Pinecone
+from pinecone.grpc import PineconeGRPC as Pinecone
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
