@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useAuth } from "@/hooks/useAuth"
 import { storage } from "@/db/config-firebase"
-import { ref, listAll, getMetadata, deleteObject } from "firebase/storage"
+import { ref, listAll, getMetadata, deleteObject, getDownloadURL } from "firebase/storage"
+import { Eye, Download } from 'lucide-react'
 
 interface Document {
   id: string
@@ -53,6 +54,18 @@ export default function MyDocsContent() {
     fetchDocuments()
   }, [user])
 
+  const handleDownload = async (doc: Document) => {
+    try {
+      const fileRef = ref(storage, doc.id)
+      const url = await getDownloadURL(fileRef)
+      
+      // Create an anchor element and trigger download
+      window.open(url, '_blank')
+    } catch (err) {
+      console.error("Error downloading document:", err)
+      alert("Failed to download the document. Please try again.")
+    }
+  }
   const handleDelete = async (id: string) => {
     try {
       const fileRef = ref(storage, id)
@@ -95,7 +108,15 @@ export default function MyDocsContent() {
             <TableCell>{doc.uploadDate}</TableCell>
             <TableCell>{doc.size}</TableCell>
             <TableCell>
-              <Button variant="destructive" onClick={() => handleDelete(doc.id)}>Delete</Button>
+            <div className="flex space-x-2">
+                      <Button variant="outline" size="sm" onClick={() => handleDownload(doc)}>
+                        <Download className="h-4 w-4 mr-2" />
+                        Download
+                      </Button>
+                      <Button variant="destructive" size="sm" onClick={() => handleDelete(doc.id)}>
+                        Delete
+                      </Button>
+                    </div>
             </TableCell>
           </TableRow>
         ))}
