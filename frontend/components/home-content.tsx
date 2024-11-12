@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import ReactMarkdown from 'react-markdown'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -20,6 +21,7 @@ interface UploadedFile {
 export default function HomeContent({ user }: { user: FirebaseUser }) {
   const [query, setQuery] = useState('')
   const [answer, setAnswer] = useState('')
+  const [contexts, setContexts] = useState<string[]>([])
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([])
   const [isProcessing, setIsProcessing] = useState(false)
 
@@ -40,6 +42,8 @@ export default function HomeContent({ user }: { user: FirebaseUser }) {
       });
 
       const formData = new FormData();
+      formData.append('user_id', user.uid);
+
       uploadedFiles.forEach((uploadedFile) => {
         formData.append('files', uploadedFile.file, uploadedFile.name);
       });
@@ -87,7 +91,10 @@ export default function HomeContent({ user }: { user: FirebaseUser }) {
       const response = await axios.get(
         `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/query`,
         {
-          params: { query },
+          params: { 
+            query,
+            user_id: user.uid  // Add user ID to the query parameters
+          },
           headers: {
             "Content-Type": "application/json",
           },
@@ -95,10 +102,13 @@ export default function HomeContent({ user }: { user: FirebaseUser }) {
       );
 
       if (response.status === 200) {
-        setAnswer(response.data);
+        const [answerText, contextsRef] = response.data;
+        setAnswer(answerText);
+        setContexts(contextsRef || []);
       } else {
         console.error("Query failed:", response);
         setAnswer("Failed to get an answer. Please try again.");
+        setContexts([]);
       }
     } catch (error) {
       if (axios.isAxiosError(error)) {
@@ -108,6 +118,7 @@ export default function HomeContent({ user }: { user: FirebaseUser }) {
         console.error("Unexpected error:", error);
         setAnswer("An unexpected error occurred. Please try again.");
       }
+      setContexts([]);
     } finally {
       setIsProcessing(false);
     }
@@ -155,7 +166,15 @@ export default function HomeContent({ user }: { user: FirebaseUser }) {
             {answer && (
               <div className="mt-4 p-4 bg-muted rounded-lg">
                 <p className="text-sm text-muted-foreground">Here is your answer...</p>
-                <p className="mt-2">{answer}</p>
+                <ReactMarkdown className="prose prose-sm dark:prose-invert">
+                  {answer}
+                </ReactMarkdown>
+                {contexts.length > 0 && (
+                  <div className="mt-4 pt-4 border-t border-border">
+                    <p className="text-xs text-muted-foreground">Answer based on: {contexts}</p>
+
+                  </div>
+                )}
               </div>
             )}
           </CardContent>

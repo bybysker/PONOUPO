@@ -3,7 +3,7 @@ import os
 from openai import OpenAI
 from pinecone.grpc import PineconeGRPC as Pinecone
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi import FastAPI, Form, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 import logging
@@ -39,7 +39,7 @@ class Document(BaseModel):
 
 
 @app.post("/add_documents")
-async def add_documents(files: List[UploadFile] = File(...)):
+async def add_documents(user_id: str = Form(...), files: List[UploadFile] = File(...)):
     try:
         for file in files:
             contents = await file.read()
@@ -53,7 +53,7 @@ async def add_documents(files: List[UploadFile] = File(...)):
             # Process the saved file
             chunks = parse_and_chunk_pdf(temp_path)
             print(f"Parsed {len(chunks)} chunks from {file.filename}")
-            populate_index(index, client, chunks)
+            populate_index(index, client, chunks, user_id)
             
             # Remove the temporary file
             os.remove(temp_path)
@@ -65,10 +65,10 @@ async def add_documents(files: List[UploadFile] = File(...)):
 
 # retrieve
 @app.get("/query")
-def query(query: str):
+def query(query: str, user_id: str):
     try:
-        answer = query_data(index, client, query)
-        return answer
+        answer, contexts_ref = query_data(index, client, query, user_id)
+        return answer, contexts_ref
     except Exception as e:
         logger.error(f"Error querying data: {e}")
         raise HTTPException(status_code=500, detail=str(e))

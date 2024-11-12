@@ -55,7 +55,7 @@ def embed_batch(openai_client: OpenAI, texts: list[str], model: str="text-embedd
     logger.debug(f"Batch embedding {len(texts)} texts using model {model}")
     return [embed_str(openai_client, text, model) for text in texts]
 
-def populate_index(index, openai_client: OpenAI, chunks: list, batch_size: int=100):
+def populate_index(index, openai_client: OpenAI, chunks: list, user_id: str, batch_size: int=100):
     logger.info(f"Populating index with {len(chunks)} chunks using batch size {batch_size}")
 
     for i in tqdm(range(0, len(chunks), batch_size)):
@@ -83,6 +83,7 @@ def populate_index(index, openai_client: OpenAI, chunks: list, batch_size: int=1
             'page_number': x.metadata.to_dict()['page_number'],
             'languages': x.metadata.to_dict()['languages'],
             'text': x.text,
+            'user_id': user_id,
         } for x in chunks_batch]
         to_upsert = list(zip(ids_batch, batch_embeddings, metadata_batch))
         # upsert to Pinecone
@@ -95,17 +96,25 @@ def filter_matches(matches, threshold=0.3):
     logger.debug(f"Retained {len(filtered_matches)} matches after filtering")
     return filtered_matches
 
-def retrieve(index, openai_client: OpenAI, query: str, limit: int=3750) -> str:
+def retrieve(index, openai_client: OpenAI, query: str, user_id: str, limit: int=3750) -> str:
     logger.info(f"Retrieving context for query: {query[:50]}...")
     xq = embed_str(openai_client, query)
 
     # get relevant contexts
-    res = index.query(vector=xq, top_k=5, include_metadata=True)
-    filtered_matches = filter_matches(res['matches'], threshold=0.1)
+    res = index.query(vector=xq, top_k=5, include_metadata=True, filter={"user_id": {"$eq":user_id}})
+    filtered_matches = filter_matches(res['matches'], threshold=0.3)
+    
     contexts = [
         x['metadata']['text'] for x in filtered_matches
     ]    
     logger.debug(f"Retrieved {len(contexts)} relevant contexts")
+
+    contexts_ref = [
+        f"{x['metadata']['filename']}, page: {int(x['metadata']['page_number'])}" for x in filtered_matches
+    ]
+    contexts_ref = contexts_ref[:3]
+    contexts_ref = "  |  ".join(contexts_ref)  # Join all references with newlines
+
     # build our prompt with the retrieved contexts included
     prompt_start = (
         "Answer the question based on the context below.\n\n"+
@@ -134,7 +143,7 @@ def retrieve(index, openai_client: OpenAI, query: str, limit: int=3750) -> str:
                 prompt_end
             )
     logger.debug(f"Generated prompt of length {len(prompt)}")
-    return prompt
+    return prompt, contexts_ref
 
 def complete(openai_client: OpenAI, query: str, system_prompt: str) -> str:
     logger.info("Generating completion with GPT-4")
@@ -149,9 +158,9 @@ def complete(openai_client: OpenAI, query: str, system_prompt: str) -> str:
     logger.debug("Successfully generated completion")
     return completion.choices[0].message.content
 
-def query_data(index, openai_client: OpenAI,query: str):
+def query_data(index, openai_client: OpenAI, query: str, user_id: str) -> str:
     logger.info(f"Processing query: {query[:50]}...")
-    prompt = retrieve(index, openai_client, query)
+    prompt, contexts_ref = retrieve(index, openai_client, query, user_id)
     answer = complete(openai_client, prompt, SYSTEM_PROMPT)
     logger.info("Query processing complete")
-    return answer
+    return answer, contexts_ref
