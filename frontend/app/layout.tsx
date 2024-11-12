@@ -18,7 +18,7 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: 'RAG App',
+  title: 'Ponoupo',
   description: 'Document-based Retrieval-Augmented Generation System',
 };
 
