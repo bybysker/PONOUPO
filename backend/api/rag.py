@@ -126,22 +126,13 @@ def retrieve(index, openai_client: OpenAI, query: str, user_id: str, limit: int=
     if len(contexts) == 0:
         logger.warning("No contexts found for query")
         prompt = prompt_start + prompt_end
-        return prompt
+        return prompt, contexts_ref
     # append contexts until hitting limit
-    for i in range(1, len(contexts)):
-        if len("\n\n---\n\n".join(contexts[:i])) >= limit:
-            prompt = (
-                prompt_start +
-                "\n\n---\n\n".join(contexts[:i-1]) +
-                prompt_end
-            )
-            break
-        elif i == len(contexts)-1:
-            prompt = (
-                prompt_start +
-                "\n\n---\n\n".join(contexts) +
-                prompt_end
-            )
+    prompt = (
+        prompt_start +
+        "\n\n---\n\n".join(contexts) +
+        prompt_end
+    )
     logger.debug(f"Generated prompt of length {len(prompt)}")
     return prompt, contexts_ref
 
@@ -160,7 +151,7 @@ def complete(openai_client: OpenAI, query: str, system_prompt: str) -> str:
 
 def query_data(index, openai_client: OpenAI, query: str, user_id: str) -> str:
     logger.info(f"Processing query: {query[:50]}...")
-    prompt, contexts_ref = retrieve(index, openai_client, query, user_id)
-    answer = complete(openai_client, prompt, SYSTEM_PROMPT)
+    enriched_prompt, contexts_ref = retrieve(index, openai_client, query, user_id)
+    answer = complete(openai_client, enriched_prompt, SYSTEM_PROMPT)
     logger.info("Query processing complete")
     return answer, contexts_ref
